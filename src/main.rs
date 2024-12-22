@@ -7,6 +7,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use axum_client_ip::InsecureClientIp;
 use chrono::Local;
 use clap::Parser as CliParser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
@@ -14,6 +15,7 @@ use env_logger::Builder;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
 use std::io::Write;
+use std::net::SocketAddr;
 
 use crate::porkbun::Porkbun;
 
@@ -104,7 +106,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new().route("/", get(root)).with_state(cli.clone());
 
     let listener = tokio::net::TcpListener::bind(cli.host).await?;
-    axum::serve(listener, app).await?;
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }
@@ -158,7 +164,11 @@ async fn handle_record(
 }
 
 #[axum::debug_handler]
-async fn root(State(cli): State<CLI>, params: Query<Params>) -> impl IntoResponse {
+async fn root(
+    State(cli): State<CLI>,
+    params: Query<Params>,
+    InsecureClientIp(client_ip): InsecureClientIp,
+) -> impl IntoResponse {
     let is_clear = params.clear.unwrap_or(false);
     if cli.token != params.token {
         return response(
@@ -188,6 +198,15 @@ async fn root(State(cli): State<CLI>, params: Query<Params>) -> impl IntoRespons
     if let Some(content) = params.aaaa.clone() {
         records.push((String::from("AAAA"), content));
     }
+
+    if params.a.is_none() && params.aaaa.is_none() {
+        if client_ip.is_ipv4() {
+            records.push((String::from("A"), client_ip.to_string()))
+        } else {
+            records.push((String::from("AAAA"), client_ip.to_string()))
+        }
+    }
+
     if let Some(content) = params.txt.clone() {
         records.push((String::from("TXT"), content));
     }
