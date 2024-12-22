@@ -39,7 +39,7 @@ struct CLI {
     #[arg(long)]
     domain: String,
 
-    // Subdomain
+    /// Optional subdomain
     #[arg(long)]
     subdomain: Option<String>,
 
