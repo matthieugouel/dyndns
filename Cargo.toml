@@ -5,6 +5,7 @@ edition = "2021"
 
 [dependencies]
 axum = { version = "0.7.5", features = ["macros"] }
+axum-client-ip = "0.6.1"
 chrono = "0.4.39"
 clap = { version = "4.5.20", features = ["derive"] }
 clap-verbosity-flag = "3.0.0"
