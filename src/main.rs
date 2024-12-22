@@ -13,6 +13,7 @@ use clap::Parser as CliParser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 use env_logger::Builder;
 use log::{error, info};
+use nanoid::nanoid;
 use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::net::SocketAddr;
@@ -69,7 +70,7 @@ fn set_logging(cli: &CLI) {
 #[derive(Deserialize)]
 struct Params {
     token: String,
-    subdomain: String,
+    subdomain: Option<String>,
     a: Option<String>,
     aaaa: Option<String>,
     txt: Option<String>,
@@ -185,12 +186,19 @@ async fn root(
         cli.porkbun_secret_key,
         cli.domain.clone(),
     );
-    let mut subdomain = params.subdomain.clone();
+
+    // Generate a random subdomain if not provided
+    let mut subdomain = match params.subdomain.clone() {
+        Some(subdomain) => subdomain,
+        None => nanoid!(7, &"1234567890abcdef".chars().collect::<Vec<char>>()),
+    };
+    // Construct the full domain name `<user_subdomain>(.<subdomain>).<domain>`
     if !cli.subdomain.is_none() {
-        subdomain = format!("{}.{}", params.subdomain, cli.subdomain.unwrap());
+        subdomain = format!("{}.{}", subdomain, cli.subdomain.unwrap());
     }
     let domain = format!("{}.{}", subdomain, cli.domain);
 
+    // Get which records to update (A, AAAA, TXT)
     let mut records = vec![];
     if let Some(content) = params.a.clone() {
         records.push((String::from("A"), content));
@@ -198,17 +206,18 @@ async fn root(
     if let Some(content) = params.aaaa.clone() {
         records.push((String::from("AAAA"), content));
     }
+    if let Some(content) = params.txt.clone() {
+        records.push((String::from("TXT"), content));
+    }
 
+    // If no A or AAAA record is provided, use the client's IP address
+    // This is working even behind a reverse proxy
     if params.a.is_none() && params.aaaa.is_none() {
         if client_ip.is_ipv4() {
             records.push((String::from("A"), client_ip.to_string()))
         } else {
             records.push((String::from("AAAA"), client_ip.to_string()))
         }
-    }
-
-    if let Some(content) = params.txt.clone() {
-        records.push((String::from("TXT"), content));
     }
 
     for (record_type, content) in records.clone().into_iter() {
