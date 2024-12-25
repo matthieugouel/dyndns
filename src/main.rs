@@ -39,10 +39,6 @@ struct CLI {
     #[arg(long)]
     domain: String,
 
-    /// Optional subdomain
-    #[arg(long)]
-    subdomain: Option<String>,
-
     /// Verbosity level
     #[clap(flatten)]
     verbose: Verbosity<InfoLevel>,
@@ -142,6 +138,13 @@ fn response(
     )
 }
 
+fn extract_subdomain(domain: String) -> (String, String) {
+    let parts: Vec<&str> = domain.split('.').collect();
+    let subdomain = parts[0..parts.len() - 2].join(".");
+    let domain = parts[parts.len() - 2..].join(".");
+    (subdomain, domain)
+}
+
 async fn handle_record(
     porkbun: &Porkbun,
     subdomain: String,
@@ -181,22 +184,22 @@ async fn root(
         );
     }
 
-    let porkbun = Porkbun::new(
-        cli.porkbun_api_key,
-        cli.porkbun_secret_key,
-        cli.domain.clone(),
-    );
+    // Extract subdomain and domain
+    let (mut subdomain, domain) = extract_subdomain(cli.domain.clone());
 
     // Generate a random subdomain if not provided
-    let mut subdomain = match params.subdomain.clone() {
+    let user_subdomain = match params.subdomain.clone() {
         Some(subdomain) => subdomain,
         None => nanoid!(7, &"1234567890abcdef".chars().collect::<Vec<char>>()),
     };
-    // Construct the full domain name `<user_subdomain>(.<subdomain>).<domain>`
-    if !cli.subdomain.is_none() {
-        subdomain = format!("{}.{}", subdomain, cli.subdomain.unwrap());
+
+    // Construct final subdomain and domain
+    if subdomain != "" {
+        subdomain = format!("{}.{}", user_subdomain, subdomain);
+    } else {
+        subdomain = user_subdomain;
     }
-    let domain = format!("{}.{}", subdomain, cli.domain);
+    let full_domain = format!("{}.{}", subdomain, domain);
 
     // Get which records to update (A, AAAA, TXT)
     let mut records = vec![];
@@ -220,6 +223,7 @@ async fn root(
         }
     }
 
+    let porkbun = Porkbun::new(cli.porkbun_api_key, cli.porkbun_secret_key, domain.clone());
     for (record_type, content) in records.clone().into_iter() {
         match handle_record(
             &porkbun,
@@ -236,17 +240,20 @@ async fn root(
                     action = "deleted"
                 }
 
-                info!("Record {}: {} {} {}", action, record_type, domain, content);
+                info!(
+                    "Record {}: {} {} {}",
+                    action, record_type, full_domain, content
+                );
             }
             Err(e) => {
                 error!(
                     "Error handling record: {} {} {}: {}",
-                    record_type, domain, content, e
+                    record_type, full_domain, content, e
                 );
                 return response(
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal Server Error",
-                    &domain,
+                    &full_domain,
                     records.clone(),
                     is_clear,
                 );
@@ -254,5 +261,31 @@ async fn root(
         }
     }
 
-    response(StatusCode::OK, "OK", &domain, records.clone(), is_clear)
+    response(
+        StatusCode::OK,
+        "OK",
+        &full_domain,
+        records.clone(),
+        is_clear,
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_extract_subdomain() {
+        let (subdomain, domain) = extract_subdomain("subdomain.domain.com".to_string());
+        assert_eq!(subdomain, "subdomain");
+        assert_eq!(domain, "domain.com");
+
+        let (subdomain, domain) = extract_subdomain("subdomain.other.co.uk".to_string());
+        assert_eq!(subdomain, "subdomain.other");
+        assert_eq!(domain, "co.uk");
+
+        let (subdomain, domain) = extract_subdomain("domain.com".to_string());
+        assert_eq!(subdomain, "");
+        assert_eq!(domain, "domain.com");
+    }
 }

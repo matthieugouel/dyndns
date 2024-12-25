@@ -15,7 +15,6 @@ Options:
       --porkbun-api-key <PORKBUN_API_KEY>        Porkbun API key
       --porkbun-secret-key <PORKBUN_SECRET_KEY>  Porkbun secret key
       --domain <DOMAIN>                          Domain
-      --subdomain <SUBDOMAIN>                    Optional subdomain
   -v, --verbose...                               Increase logging verbosity
   -q, --quiet...                                 Decrease logging verbosity
       --token <TOKEN>                            Authentication token
@@ -46,7 +45,7 @@ The server will return the updated records in JSON format.
 On those examples, the server has been started with the following command:
 
 ```sh
-$ dyndns --porkbun-api-key key --porkbun-secret-key secret --domain nxthdr.dev --subdomain dyndns --token example
+$ dyndns --porkbun-api-key key --porkbun-secret-key secret --domain dyndns.nxthdr.dev --token example
 ```
 
 * Update the `A` record for the user subdomain `test` with the IP `1.1.1.1`
