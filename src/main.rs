@@ -45,7 +45,7 @@ struct CLI {
 
     /// Authentication token
     #[arg(long)]
-    token: String,
+    token: Option<String>,
 }
 
 fn set_logging(cli: &CLI) {
@@ -174,18 +174,20 @@ async fn root(
     InsecureClientIp(client_ip): InsecureClientIp,
 ) -> impl IntoResponse {
     let is_clear = params.clear.unwrap_or(false);
-    if cli.token != params.token {
-        return response(
-            StatusCode::UNAUTHORIZED,
-            "Unauthorized: Invalid token",
-            "",
-            vec![],
-            is_clear,
-        );
+    if let Some(token) = &cli.token {
+        if token != &params.token {
+            return response(
+                StatusCode::UNAUTHORIZED,
+                "Unauthorized: Invalid token",
+                "",
+                vec![],
+                is_clear,
+            );
+        }
     }
 
     // Extract subdomain and domain
-    let (mut subdomain, domain) = extract_subdomain(cli.domain.clone());
+    let (subdomain, domain) = extract_subdomain(cli.domain.clone());
 
     // Generate a random subdomain if not provided
     let user_subdomain = match params.subdomain.clone() {
@@ -194,12 +196,12 @@ async fn root(
     };
 
     // Construct final subdomain and domain
-    if subdomain != "" {
-        subdomain = format!("{}.{}", user_subdomain, subdomain);
+    let full_subdomain = if subdomain.is_empty() {
+        user_subdomain
     } else {
-        subdomain = user_subdomain;
-    }
-    let full_domain = format!("{}.{}", subdomain, domain);
+        format!("{}.{}", user_subdomain, subdomain)
+    };
+    let full_domain = format!("{}.{}", full_subdomain, domain);
 
     // Get which records to update (A, AAAA, TXT)
     let mut records = vec![];
@@ -227,7 +229,7 @@ async fn root(
     for (record_type, content) in records.clone().into_iter() {
         match handle_record(
             &porkbun,
-            subdomain.clone(),
+            full_subdomain.clone(),
             record_type.clone(),
             content.clone(),
             is_clear,
