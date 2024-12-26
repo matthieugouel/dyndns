@@ -1,7 +1,7 @@
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize)]
 struct Auth {
     apikey: String,
     secretapikey: String,
@@ -25,6 +25,34 @@ struct AuthContent {
     ttl: usize,
 }
 
+#[allow(dead_code)]
+pub trait PorkbunAPI {
+    async fn create_record(
+        &self,
+        subdomain: &str,
+        record_type: &str,
+        content: &str,
+    ) -> Result<String, Box<dyn std::error::Error>>;
+    async fn get_record(
+        &self,
+        subdomain: &str,
+        record_type: &str,
+    ) -> Result<String, Box<dyn std::error::Error>>;
+    async fn update_record(
+        &self,
+        subdomain: &str,
+        record_type: &str,
+        content: &str,
+    ) -> Result<String, Box<dyn std::error::Error>>;
+    async fn delete_record(
+        &self,
+        subdomain: &str,
+        record_type: &str,
+        content: &str,
+    ) -> Result<String, Box<dyn std::error::Error>>;
+}
+
+#[derive(Clone)]
 pub struct Porkbun {
     base_url: String,
     client: Client,
@@ -32,7 +60,6 @@ pub struct Porkbun {
     auth: Auth,
 }
 
-#[allow(dead_code)]
 impl Porkbun {
     pub fn new(api_key: String, secret_key: String, domain: String) -> Self {
         let client = Client::builder().build().unwrap();
@@ -47,8 +74,10 @@ impl Porkbun {
             auth,
         }
     }
+}
 
-    pub async fn create_record(
+impl PorkbunAPI for Porkbun {
+    async fn create_record(
         &self,
         subdomain: &str,
         record_type: &str,
@@ -68,7 +97,7 @@ impl Porkbun {
         Ok(text)
     }
 
-    pub async fn get_record(
+    async fn get_record(
         &self,
         subdomain: &str,
         record_type: &str,
@@ -83,7 +112,7 @@ impl Porkbun {
         Ok(text)
     }
 
-    pub async fn update_record(
+    async fn update_record(
         &self,
         subdomain: &str,
         record_type: &str,
@@ -104,7 +133,7 @@ impl Porkbun {
         Ok(text)
     }
 
-    pub async fn delete_record(
+    async fn delete_record(
         &self,
         subdomain: &str,
         record_type: &str,
@@ -123,5 +152,64 @@ impl Porkbun {
         let response = self.client.post(url).body(auth_content).send().await?;
         let text = response.text().await?;
         Ok(text)
+    }
+}
+
+#[derive(Clone)]
+#[cfg(test)]
+pub struct MockPorkbun {
+    domain: String,
+}
+
+#[cfg(test)]
+impl MockPorkbun {
+    pub fn new(domain: String) -> Self {
+        MockPorkbun { domain }
+    }
+
+    fn fqdn(&self, subdomain: &str) -> String {
+        format!("{}.{}", subdomain, self.domain)
+    }
+}
+
+#[cfg(test)]
+impl PorkbunAPI for MockPorkbun {
+    async fn create_record(
+        &self,
+        subdomain: &str,
+        _record_type: &str,
+        _content: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let fqdn = self.fqdn(subdomain);
+        Ok(format!("create_record: {}", fqdn))
+    }
+
+    async fn get_record(
+        &self,
+        subdomain: &str,
+        _record_type: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let fqdn = self.fqdn(subdomain);
+        Ok(format!("get_record: {}", fqdn))
+    }
+
+    async fn update_record(
+        &self,
+        subdomain: &str,
+        _record_type: &str,
+        _content: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let fqdn = self.fqdn(subdomain);
+        Ok(format!("update_record: {}", fqdn))
+    }
+
+    async fn delete_record(
+        &self,
+        subdomain: &str,
+        _record_type: &str,
+        _content: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        let fqdn = self.fqdn(subdomain);
+        Ok(format!("delete_record: {}", fqdn))
     }
 }

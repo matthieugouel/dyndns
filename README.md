@@ -1,8 +1,5 @@
 # DynDNS
 
-> [!WARNING]
-> DynDNS is currently in early-stage development.
-
 This is a simple dynamic DNS (dynDNS) server that allows to update A/AAAA/TXT records for a given domain.
 
 Similar to services like [DuckDNS](https://www.duckdns.org/), but you can host it yourself easilly. Currently, it only supports [Porkbun](https://porkbun.com/)'s backend for DNS updates. Future updates may include support for additional DNS providers.
