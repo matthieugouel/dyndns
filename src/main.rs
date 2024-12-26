@@ -18,7 +18,7 @@ use serde::{Deserialize, Serialize};
 use std::io::Write;
 use std::net::SocketAddr;
 
-use crate::porkbun::Porkbun;
+use crate::porkbun::{Porkbun, PorkbunAPI};
 
 #[derive(CliParser, Debug, Clone)]
 #[command(version, about, long_about = None)]
@@ -146,25 +146,31 @@ fn extract_subdomain(domain: String) -> (String, String) {
 }
 
 async fn handle_record(
-    porkbun: &Porkbun,
+    porkbun: impl PorkbunAPI,
     subdomain: String,
     record_type: String,
     content: String,
     clear: bool,
-) -> Result<(), Box<dyn std::error::Error>> {
-    porkbun
-        .delete_record(&subdomain, &record_type, &content)
-        .await?;
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut responses = vec![];
+
+    responses.push(
+        porkbun
+            .delete_record(&subdomain, &record_type, &content)
+            .await?,
+    );
 
     if clear {
-        return Ok(());
+        return Ok(responses);
     }
 
-    porkbun
-        .create_record(&subdomain, &record_type, &content)
-        .await?;
+    responses.push(
+        porkbun
+            .create_record(&subdomain, &record_type, &content)
+            .await?,
+    );
 
-    Ok(())
+    Ok(responses)
 }
 
 #[axum::debug_handler]
@@ -225,10 +231,14 @@ async fn root(
         }
     }
 
-    let porkbun = Porkbun::new(cli.porkbun_api_key, cli.porkbun_secret_key, domain.clone());
+    let porkbun = Porkbun::new(
+        cli.porkbun_api_key.clone(),
+        cli.porkbun_secret_key.clone(),
+        domain.clone(),
+    );
     for (record_type, content) in records.clone().into_iter() {
         match handle_record(
-            &porkbun,
+            porkbun.clone(),
             full_subdomain.clone(),
             record_type.clone(),
             content.clone(),
@@ -275,6 +285,7 @@ async fn root(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::porkbun::MockPorkbun;
 
     #[test]
     fn test_extract_subdomain() {
@@ -289,5 +300,41 @@ mod tests {
         let (subdomain, domain) = extract_subdomain("domain.com".to_string());
         assert_eq!(subdomain, "");
         assert_eq!(domain, "domain.com");
+    }
+
+    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    async fn test_handle_record() {
+        let porkbun = MockPorkbun::new("domain.com".to_string());
+        let responses = handle_record(
+            porkbun.clone(),
+            "subdomain".to_string(),
+            "A".to_string(),
+            "test".to_string(),
+            false,
+        )
+        .await;
+        assert_eq!(responses.as_ref().unwrap().len(), 2);
+        assert_eq!(
+            responses.as_ref().unwrap()[0],
+            "delete_record: subdomain.domain.com"
+        );
+        assert_eq!(
+            responses.as_ref().unwrap()[1],
+            "create_record: subdomain.domain.com"
+        );
+
+        let responses = handle_record(
+            porkbun.clone(),
+            "subdomain".to_string(),
+            "A".to_string(),
+            "test".to_string(),
+            true,
+        )
+        .await;
+        assert_eq!(responses.as_ref().unwrap().len(), 1);
+        assert_eq!(
+            responses.as_ref().unwrap()[0],
+            "delete_record: subdomain.domain.com"
+        );
     }
 }
