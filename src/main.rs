@@ -22,7 +22,7 @@ use crate::porkbun::{Porkbun, PorkbunAPI};
 
 #[derive(CliParser, Debug, Clone)]
 #[command(version, about, long_about = None)]
-struct CLI {
+struct Cli {
     /// Host
     #[arg(long, default_value = "0.0.0.0:3000")]
     host: String,
@@ -48,7 +48,7 @@ struct CLI {
     token: Option<String>,
 }
 
-fn set_logging(cli: &CLI) {
+fn set_logging(cli: &Cli) {
     Builder::new()
         .format(|buf, record| {
             writeln!(
@@ -97,7 +97,7 @@ impl IntoResponse for Response {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let cli = CLI::parse();
+    let cli = Cli::parse();
     set_logging(&cli);
 
     let app = Router::new().route("/", get(root)).with_state(cli.clone());
@@ -133,7 +133,7 @@ fn response(
             message: String::from(message),
             domain: String::from(domain),
             records: record_responses,
-            clear: clear,
+            clear,
         }),
     )
 }
@@ -175,7 +175,7 @@ async fn handle_record(
 
 #[axum::debug_handler]
 async fn root(
-    State(cli): State<CLI>,
+    State(cli): State<Cli>,
     params: Query<Params>,
     InsecureClientIp(client_ip): InsecureClientIp,
 ) -> impl IntoResponse {
