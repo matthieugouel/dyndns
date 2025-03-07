@@ -6,6 +6,7 @@ env:
   CARGO_TERM_COLOR: always
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  BUILDX_NO_DEFAULT_ATTESTATIONS: 1
 
 jobs:
   tests:
@@ -58,7 +59,6 @@ jobs:
         with:
           context: .
           push: true
-          provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
 
