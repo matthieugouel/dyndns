@@ -1,5 +1,6 @@
 mod porkbun;
 
+use anyhow::Result;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -8,15 +9,12 @@ use axum::{
     Json, Router,
 };
 use axum_client_ip::InsecureClientIp;
-use chrono::Local;
 use clap::Parser as CliParser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
-use env_logger::Builder;
-use log::{error, info};
 use nanoid::nanoid;
 use serde::{Deserialize, Serialize};
-use std::io::Write;
 use std::net::SocketAddr;
+use tracing::{error, info};
 
 use crate::porkbun::{Porkbun, PorkbunAPI};
 
@@ -39,28 +37,24 @@ struct Cli {
     #[arg(long)]
     domain: String,
 
-    /// Verbosity level
-    #[clap(flatten)]
-    verbose: Verbosity<InfoLevel>,
-
     /// Authentication token
     #[arg(long)]
     token: Option<String>,
+
+    /// Verbosity level
+    #[clap(flatten)]
+    verbose: Verbosity<InfoLevel>,
 }
 
-fn set_logging(cli: &Cli) {
-    Builder::new()
-        .format(|buf, record| {
-            writeln!(
-                buf,
-                "{} [{}] - {}",
-                Local::now().format("%Y-%m-%dT%H:%M:%S"),
-                record.level(),
-                record.args()
-            )
-        })
-        .filter_module("dyndns", cli.verbose.log_level_filter())
-        .init();
+fn set_tracing(cli: &Cli) -> Result<()> {
+    let subscriber = tracing_subscriber::fmt()
+        .compact()
+        .with_file(true)
+        .with_line_number(true)
+        .with_max_level(cli.verbose)
+        .finish();
+    tracing::subscriber::set_global_default(subscriber)?;
+    Ok(())
 }
 
 #[derive(Deserialize)]
@@ -96,9 +90,9 @@ impl IntoResponse for Response {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+async fn main() -> Result<()> {
     let cli = Cli::parse();
-    set_logging(&cli);
+    set_tracing(&cli)?;
 
     let app = Router::new().route("/", get(root)).with_state(cli.clone());
 
