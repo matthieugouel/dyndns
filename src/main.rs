@@ -8,7 +8,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use axum_client_ip::InsecureClientIp;
+use axum_client_ip::{ClientIp, ClientIpSource};
 use clap::Parser as CliParser;
 use clap_verbosity_flag::{InfoLevel, Verbosity};
 use nanoid::nanoid;
@@ -40,6 +40,12 @@ struct Cli {
     /// Authentication token
     #[arg(long)]
     token: Option<String>,
+
+    /// How to determine the client IP. One of: ConnectInfo, RightmostXForwardedFor,
+    /// RightmostForwarded, XRealIp, CfConnectingIp, FlyClientIp, TrueClientIp,
+    /// CloudFrontViewerAddress.
+    #[arg(long, default_value = "ConnectInfo")]
+    client_ip_source: ClientIpSource,
 
     /// Verbosity level
     #[clap(flatten)]
@@ -94,7 +100,10 @@ async fn main() -> Result<()> {
     let cli = Cli::parse();
     set_tracing(&cli)?;
 
-    let app = Router::new().route("/", get(root)).with_state(cli.clone());
+    let app = Router::new()
+        .route("/", get(root))
+        .layer(cli.client_ip_source.clone().into_extension())
+        .with_state(cli.clone());
 
     let listener = tokio::net::TcpListener::bind(cli.host).await?;
     axum::serve(
@@ -171,7 +180,7 @@ async fn handle_record(
 async fn root(
     State(cli): State<Cli>,
     params: Query<Params>,
-    InsecureClientIp(client_ip): InsecureClientIp,
+    ClientIp(client_ip): ClientIp,
 ) -> impl IntoResponse {
     let is_clear = params.clear.unwrap_or(false);
     if let Some(token) = &cli.token {
